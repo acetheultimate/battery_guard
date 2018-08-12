@@ -35,19 +35,20 @@ while True:
 
     # if current is lesser then low_threshold value and if it's discharging
     if current <= low_thresh and status == "Discharging":
-        # tell it that I've been lowest
-        if deep_mode:
-            data['low_flag'] = True
 
         # Log with current low count with date and time
         data[str((data['count'], 'low_at'))] = datetime.now()
-
+        data.sync()
         # print the current cycle detail on console, works if run on terminal, settings in README
         # will make it divert to log.txt
         # detail will contain Sr. No. of last cycle and time it powered the machine
-        print("Cycle ", data['count'], ":\t",
-              data[str((data['count'], 'low_at'))]-data[str((data['count'], 'high_at'))])
+        low_at = data.get(str((data['count'], 'low_at')), None)
+        high_at = data.get(str((data['count'], 'high_at')), None)
+        if low_at and high_at:
+            print("Cycle ", data['count'], ":\t", low_at-high_at)
 
+        # tell it that I've been lowest iff have been to highest
+        data['low_flag'] = True and high_at != None
         # status variable for looping while being discharged
         status = open("/sys/class/power_supply/BAT0/status").read().strip()
         while status == "Discharging":
@@ -60,12 +61,11 @@ while True:
     # if current is higher than maximum charge threshold and it's charging
     elif current >= high_thresh and status == "Charging":
         # tell it that I've been highest
-        if deep_mode:
-            data['high_flag'] = True
+        data['high_flag'] = True
 
-        # Log with current low count with date and time
+        # Log with current high count with date and time
         data[str((data['count'], 'high_at'))] = datetime.now()
-
+        data.sync()
         # status variable for looping while being charged
         status = open("/sys/class/power_supply/BAT0/status").read().strip()
         while status == "Charging":
@@ -77,7 +77,7 @@ while True:
 
     # If it's been highest and lowest
     if data['high_flag'] and data['low_flag']:
-        # if it was in deep mode(count=100), set count to 0
+        # if it was in deep mode(count>=100), set count to 0
         if deep_mode:
             data['count'] = 0
 
@@ -86,7 +86,7 @@ while True:
             data['count'] += 1
             data['high_flag'] = False
             data['low_flag'] = False
-            deep_mode = False
+        data.sync()
     else: # Let's keep it this way
         if deep_mode:
             # wait for 10 seconds before checking the values again
